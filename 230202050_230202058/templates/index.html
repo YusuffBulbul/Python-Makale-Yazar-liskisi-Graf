@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.22.0/cytoscape.min.js"></script>
+    <style>
+        body {
+            display: grid;
+            grid-template-columns: 20% 60% 20%;
+            grid-template-rows: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #left-panel {
+            background: #f4f4f4;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+        }
+        #center-panel {
+            background: #ffffff;
+            position: relative;
+        }
+        #right-panel {
+            background: #f4f4f4;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #ccc;
+        }
+        button {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        h2 {
+            font-size: 18px;
+            text-align: center;
+        }
+        #graph-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="left-panel">
+        <h2>Çıktı Ekranı</h2>
+        <div id="output-container">
+            <p>İster seçimi yaptığınızda burada sonuçlar gösterilecektir.</p>
+        </div>
+    </div>
+
+    <div id="center-panel">
+        <div id="graph-container"></div>
+    </div>
+
+    <div id="right-panel">
+        <h2>İsterler</h2>
+        <button onclick="handleIster(1)">1. İSTER</button>
+        <button onclick="handleIster(2)">2. İSTER</button>
+        <button onclick="handleIster(3)">3. İSTER</button>
+        <button onclick="handleIster(4)">4. İSTER</button>
+        <button onclick="handleIster(5)">5. İSTER</button>
+        <button onclick="handleIster(6)">6. İSTER</button>
+        <button onclick="handleIster(7)">7. İSTER</button>
+    </div>
+
+    <script>
+        let cy;
+        let graphDataGlobal = {};
+
+        async function loadGraph() {
+            const response = await fetch('/graph');
+            const graphData = await response.json();
+            graphDataGlobal = graphData;
+
+            cy = cytoscape({
+                container: document.getElementById('graph-container'),
+                elements: [],
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'font-size': '24px',
+                            'background-color': '#76b5c5'
+                        }
+                    },
+                    {
+                        selector: 'node.central',
+                        style: {
+                            'background-color': '#f4a261',
+                            'width': 100,
+                            'height': 100,
+                            'font-size': '28px',
+                            'border-color': '#e76f51',
+                            'border-width': 2
+                        }
+                    },
+                    {
+                        selector: 'node.high-articles',
+                        style: {
+                            'background-color': '#2a9d8f',
+                            'width': 80,
+                            'height': 80,
+                        }
+                    },
+                    {
+                        selector: 'node.low-articles',
+                        style: {
+                            'background-color': '#a8dadc',
+                            'width': 40,
+                            'height': 40,
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 'mapData(weight, 1, 10, 2, 6)',
+                            'line-color': '#ccc'
+                        }
+                    },
+                    {
+                        selector: '.highlighted-node',
+                        style: {
+                            'background-color': '#e74c3c',
+                            'border-color': '#c0392b',
+                            'border-width': 3,
+                            'width': 70,
+                            'height': 70,
+                            'label': 'data(label)',
+                            'color': '#000000',
+                            'font-weight': 'bold'
+                        }
+                    },
+                    {
+                        selector: '.highlighted-edge',
+                        style: {
+                            'line-color': '#e74c3c',
+                            'width': 7,
+                            'curve-style': 'bezier'
+                        }
+                    }
+                ],
+                zoomingEnabled: true,
+                userPanningEnabled: true,
+                layout: {
+                    name: 'preset'
+                }
+            });
+
+            const centralNodes = [];
+            const positions = {};
+            const colors = ['#76b5c5', '#f4a261', '#ff6f61', '#b7ff20', '#ffcd20'];
+            let colorIndex = 0;
+            const nodeSpacingMultiplier = 4;
+            const baseSpacing = 400;
+            const spacing = baseSpacing * nodeSpacingMultiplier;
+
+            Object.keys(graphData).forEach(nodeName => {
+                const nodeData = graphData[nodeName];
+                const degree = Object.keys(nodeData.edges).length;
+                if (degree > 5) {
+                    centralNodes.push({ name: nodeName, degree });
+                }
+            });
+
+            centralNodes.sort((a, b) => b.degree - a.degree);
+
+            centralNodes.forEach((centerNode) => {
+                const centralNodeData = graphData[centerNode.name];
+                const connectedNodes = Object.keys(centralNodeData.edges);
+                const radius = 100 + connectedNodes.length * 20;
+                const angleStep = (2 * Math.PI) / connectedNodes.length;
+
+                const centerX = Math.random() * 5000 * 10;
+                const centerY = Math.random() * 3000 * 10;
+
+                positions[centerNode.name] = { x: centerX, y: centerY };
+                cy.add({
+                    group: 'nodes',
+                    data: {
+                        id: centralNodeData.id,
+                        label: centerNode.name,
+                        weight: connectedNodes.length,
+                        papers: centralNodeData.papers || []
+                    },
+                    position: { x: centerX, y: centerY },
+                    classes: 'central'
+                });
+
+                connectedNodes.forEach((connectedNode, i) => {
+                    const angle = i * angleStep;
+                    const x = centerX + radius * Math.cos(angle);
+                    const y = centerY + radius * Math.sin(angle);
+
+                    const connectedNodeData = graphData[connectedNode];
+                    const paperCount = (connectedNodeData.papers || []).length;
+
+                    const nodeClass = paperCount > 5 ? 'high-articles' : 'low-articles';
+
+                    if (!positions[connectedNode]) {
+                        positions[connectedNode] = { x, y };
+                        cy.add({
+                            group: 'nodes',
+                            data: {
+                                id: connectedNodeData.id,
+                                label: connectedNode,
+                                weight: Object.keys(connectedNodeData.edges).length,
+                                papers: connectedNodeData.papers || []
+                            },
+                            position: { x, y },
+                            classes: nodeClass
+                        });
+                    }
+
+                    cy.add({
+                        group: 'edges',
+                        data: {
+                            source: centralNodeData.id,
+                            target: connectedNodeData.id,
+                            weight: centralNodeData.edges[connectedNode].weight
+                        },
+                        style: { 'line-color': colors[colorIndex % colors.length] }
+                    });
+                });
+
+                colorIndex++;
+            });
+
+            cy.layout({ name: 'preset' }).run();
+
+            cy.on('tap', 'node', function (evt) {
+                const node = evt.target;
+                const nodeName = node.data('label');
+                const nodeId = node.data('id');
+                const papers = node.data('papers') || [];
+                const outputContainer = document.getElementById('output-container');
+                outputContainer.innerHTML = `
+                <h3>Düğüm Bilgileri</h3>
+                <p><strong>İsim:</strong> ${nodeName}</p>
+                <p><strong>ID:</strong> ${nodeId}</p>
+                <p><strong>Makaleler:</strong></p>
+                <ul>${papers.map(paper => `<li>${paper}</li>`).join('')}</ul>
+                `;
+            });
+        }
+
+        function id_göre_dugum_bulma(id) {
+            for (const nodeName in graphDataGlobal) {
+                if (graphDataGlobal[nodeName].id === id) {
+                    return nodeName;
+                }
+            }
+            return `Author ${id}`;
+        }
+
+        document.addEventListener("DOMContentLoaded", loadGraph);
+
+        function adimlari_goster(steps) {
+            const outputContainer = document.getElementById("output-container");
+            let htmlContent = "<h3>Adım Adım En Kısa Yol</h3><ul>";
+
+            steps.forEach(step => {
+                htmlContent += `<li><strong>Adım ${step.step}:</strong> ${step.path}</li>`;
+            });
+
+            htmlContent += "</ul>";
+
+            if (steps.length > 0) {
+                const finalStep = steps[steps.length - 1];
+                htmlContent += `
+                    <div>
+                        <h3>Gidilebilecek En Kısa Yol</h3>
+                        <p><strong>${finalStep.path}</strong></p>
+                    </div>
+                `;
+            }
+
+            outputContainer.innerHTML = htmlContent;
+        }
+
+        function yolu_vurgula(path, edges) {
+            if (!Array.isArray(path) || !Array.isArray(edges)) {
+                console.error("highlightPath: Geçersiz parametreler.", path, edges);
+                return;
+            }
+
+            cy.elements().removeClass('highlighted-node').removeClass('highlighted-edge');
+
+            path.forEach(nodeId => {
+                let node = cy.$(`[id="${nodeId}"]`);
+                if (node.length > 0) node.addClass('highlighted-node');
+            });
+
+            edges.forEach(edge => {
+                let forwardEdge = cy.edges(`[source="${edge.source}"][target="${edge.target}"]`);
+                let reverseEdge = cy.edges(`[source="${edge.target}"][target="${edge.source}"]`);
+
+                if (forwardEdge.length > 0) {
+                    forwardEdge.addClass('highlighted-edge');
+                } else if (reverseEdge.length > 0) {
+                    reverseEdge.addClass('highlighted-edge');
+                }
+            });
+        }
+
+        async function handleIster(isterId) {
+            if (isterId === 1) {
+                const start = prompt("Başlangıç yazar ID'sini giriniz:").trim();
+                const end = prompt("Bitiş yazar ID'sini giriniz:").trim();
+
+                if (!start || !end) {
+                    alert("Başlangıç ve bitiş ID'leri gereklidir.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/shortest-path', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start, end })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else if (data.message) {
+                        alert(data.message);
+                    } else {
+                        if (Array.isArray(data.queue)) {
+                            window.lastQueue = data.queue;
+                        }
+                        yolu_vurgula(data.path, data.edges);
+                        adimlari_goster(data.steps);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            }
+            else if (isterId === 2) {
+                const authorId = prompt("Yazar ID'sini giriniz:").trim();
+
+                if (!authorId) {
+                    alert("Yazar ID'si gereklidir.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/queue', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ author: authorId })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        kuyruk_adimlarini_goster(data.log, data.queue);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            }
+            else if (isterId === 3) {
+                if (!window.lastQueue || !Array.isArray(window.lastQueue)) {
+                    alert("1. İster'i çalıştırmadan 3. İster'i kullanamazsınız.");
+                    return;
+                }
+
+                const formattedQueue = window.lastQueue.map(id => ({
+                    id: id,
+                    label: id_göre_dugum_bulma(id)
+                }));
+
+                const authorIdToDelete = prompt("Silmek istediğiniz yazar ID'sini giriniz:");
+
+                if (!authorIdToDelete) {
+                    alert("Yazar ID'si girmelisiniz.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/list-authors', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            author_id: authorIdToDelete,
+                            queue: formattedQueue
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        dugumleri_goruntule(data.original_queue, "Silinmeden Önceki Durum");
+                        setTimeout(() => {
+                            dugumleri_goruntule(data.updated_queue, "Silindikten Sonraki Durum");
+                        }, 5000);
+
+                        if (data.deleted_author) {
+                            alert(`Silinen Yazar: ${data.deleted_author.label} (ID: ${data.deleted_author.id})`);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            }
+            else if (isterId === 4) {
+                const authorId = prompt("Yazar ID'sini giriniz:").trim();
+
+                if (!authorId) {
+                    alert("Yazar ID'si gereklidir.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/shortest-paths-all', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ author: authorId })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        yol_tablosu_goruntule(data.author_name, data.distances, data.steps);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            }
+            else if (isterId === 5) {
+                const authorId = prompt("Yazar ID'sini giriniz:").trim();
+
+                if (!authorId) {
+                    alert("Yazar ID'si gereklidir.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/collaborators', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ author: authorId })
+                    });
+
+                    const data = await response.json();
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        sonuc_goster(`A yazarın işbirliği yaptığı yazar sayısı: <strong>${data.total_collaborators}</strong>`);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            } else if (isterId === 6) {
+                try {
+                    const response = await fetch('/most-collaborative');
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        sonuc_goster(`En çok işbirliği yapan yazar: <strong>${data.author}</strong>`);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            } else if (isterId === 7) {
+                const startId = prompt("Başlangıç yazar ID'sini giriniz:").trim();
+
+                if (!startId) {
+                    alert("Yazar ID'si gereklidir.");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/longest-path', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start: startId })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        en_uzun_yolu_goster(data.longest_path, data.length);
+                    }
+                } catch (error) {
+                    console.error("Hata oluştu:", error);
+                    alert("Bir hata oluştu. Lütfen tekrar deneyiniz.");
+                }
+            }
+        }
+
+        async function dugumleri_goruntule(nodes, title) {
+            const outputContainer = document.getElementById("output-container");
+
+            if (!nodes || nodes.length === 0) {
+                outputContainer.innerHTML = `<p>${title}: Kuyrukta yazar bulunamadı.</p>`;
+                return;
+            }
+
+            let htmlContent = `<h3>${title}</h3><div style='text-align: center; font-family: Arial, sans-serif;'>`;
+
+            htmlContent += `
+                <div style="
+                    background-color: rgba(255, 255, 0, 0.5);
+                    border-radius: 50%;
+                    width: 100px;
+                    height: 100px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    margin: 0 auto 20px auto;
+                ">
+                    <p style="text-align: center; margin: 0;">${nodes[0].label}</p>
+                </div>
+            `;
+
+            htmlContent += `
+                <div style="display: flex; justify-content: space-around; align-items: flex-start; height: 300px;">
+                    ${nodes.slice(1).map(node => `
+                        <div style="display: flex; flex-direction: column; align-items: center; flex: 1;">
+                            <div style="border-left: 2px solid black; height: 100px; margin: 0 auto;"></div>
+                            <div style="
+                                background-color: rgba(255, 255, 0, 0.5);
+                                border-radius: 50%;
+                                width: 100px;
+                                height: 100px;
+                                display: flex;
+                                justify-content: center;
+                                align-items: center;
+                                margin-top: 10px;">
+                                <p style="text-align: center; margin: 0;">${node.label}</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            htmlContent += "</div>";
+            outputContainer.innerHTML = htmlContent;
+        }
+
+        function en_uzun_yolu_goster(path, length) {
+            const outputContainer = document.getElementById("output-container");
+            let pathString = path.join(" → ");
+            outputContainer.innerHTML = `
+            <div>
+              <h3>En Uzun Yol</h3>
+              <p><strong>Uzunluk:</strong> ${length}</p>
+              <p><strong>Yol:</strong> ${pathString}</p>
+            </div>
+          `;
+        }
+
+        function yol_tablosu_goruntule(authorName, distances, steps) {
+            const outputContainer = document.getElementById("output-container");
+            let htmlContent = `<h3>${authorName} Kısa Yolları </h3>`;
+            
+            htmlContent += "<table border='1' width='100%'><tr><th>Hedef Yazar</th><th>Mesafe</th></tr>";
+
+            for (const [node, distance] of Object.entries(distances)) {
+                if (distance !== "Ulaşılamaz") {
+                    htmlContent += `<tr><td>${node}</td><td>${distance}</td></tr>`;
+                }
+            }
+
+            htmlContent += "</table><h3>Adım Adım Güncellemeler</h3><table border='1' width='100%'>";
+            htmlContent += "<tr><th>Kaynak</th><th>Hedef</th><th>Mesafe</th></tr>";
+
+            steps.forEach(step => {
+                htmlContent += `<tr>
+                    <td>${step.from}</td>
+                    <td>${step.to}</td>
+                    <td>${step.distance}</td>
+                </tr>`;
+            });
+
+            htmlContent += "</table>";
+            outputContainer.innerHTML = htmlContent;
+        }
+
+        function sonuc_goster(content) {
+            const outputContainer = document.getElementById("output-container");
+            outputContainer.innerHTML = `
+                <div>
+                  <h3>Sonuç</h3>
+                  <p>${content}</p>
+                </div>
+              `;
+        }
+
+        function kuyruk_adimlarini_goster(log, sortedQueue) {
+            const outputContainer = document.getElementById("output-container");
+            let htmlContent = "<h3>Kuyruk İşlemleri Adım Adım (Büyükten Küçüğe)</h3><ul>";
+
+            log.forEach((entry, index) => {
+                if (entry.action === "enqueue") {
+                    htmlContent += `<li style="color: green;">Adım ${index + 1}: <strong>Eklendi</strong> - ${entry.item[0]} (Makale Sayısı: ${entry.item[1]})</li>`;
+                } else if (entry.action === "dequeue") {
+                    htmlContent += `<li style="color: red;">Adım ${index + 1}: <strong>Çıkarıldı</strong> - ${entry.item[0]} (Makale Sayısı: ${entry.item[1]})</li>`;
+                } else if (entry.action === "enqueue_sorted") {
+                    htmlContent += `<li style="color: blue;">Adım ${index + 1}: <strong>Sıralanmış Kuyruğa Eklendi</strong> - ${entry.item[0]} (Makale Sayısı: ${entry.item[1]})</li>`;
+                } else if (entry.action === "sorted") {
+                    htmlContent += `<li style="color: purple;">Adım ${index + 1}: <strong>Kuyruk Sıralandı (Büyükten Küçüğe)</strong></li>`;
+                }
+            });
+
+            htmlContent += "</ul><h3>Büyükten Küçüğe Sıralanmış Kuyruk</h3><ul>";
+
+            sortedQueue.forEach((item, index) => {
+                htmlContent += `<li>${index + 1}. <strong>${item[0]}</strong> - Makale Sayısı: ${item[1]}</li>`;
+            });
+
+            htmlContent += "</ul>";
+            outputContainer.innerHTML = htmlContent;
+        }
+    </script>
+</body>
+</html>
